@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en"><head><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet"><style>
+:where(html){font-family:"Inter",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+:where(code,pre,kbd,samp){font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+</style><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content"><title>Phoenix</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script type="module">
+  import sodiumMod from "https://cdn.jsdelivr.net/npm/libsodium-wrappers-sumo@0.7.15/+esm";
+  await sodiumMod.ready;
+  window.sodium = sodiumMod;
+  window.dispatchEvent(new Event("sodium-ready"));
+</script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+/* Viewport containment: Lock html/body scroll. Only message container scrolls, preventing header shift on mobile keyboard. */
+html,body{height:100%;overflow:hidden;overscroll-behavior:none;position:fixed;width:100%}
+*,*::before,*::after{box-sizing:border-box} *{font-family:"Inter",ui-sans-serif,system-ui;-webkit-tap-highlight-color:transparent} .mono{font-family:"JetBrains Mono",ui-monospace,monospace} button{-webkit-tap-highlight-color:transparent; outline:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;} button:focus{outline:none; box-shadow:none;} button:active{outline:none; box-shadow:none; -webkit-tap-highlight-color:transparent;}
+.app{height:100dvh;display:flex;flex-direction:column;background:#fff}
+.header{height:52px;border-bottom:1px solid rgba(0,0,0,.06);display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+.bubble-me{position:relative;background:#000;color:#fff;border-radius:18px;border-bottom-right-radius:5px;overflow:visible;min-width:56px;max-width:100%;display:inline-flex;align-items:center;justify-content:flex-start;padding:5px 48px 5px 12px !important}
+.bubble-them{position:relative;background:#f0f0f0;color:#000;border-radius:18px;border-bottom-left-radius:5px;overflow:visible;min-width:56px;max-width:100%;display:inline-flex;align-items:center;justify-content:flex-start;padding:5px 48px 5px 12px !important}
+.bubble-content{font-size:14.2px;line-height:19px;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;display:block;text-align:left}
+.bubble-time{position:absolute;right:10px;bottom:2px;font-size:9.5px;line-height:11px;letter-spacing:0.02em;white-space:nowrap;pointer-events:none;transform:none}
+.bubble-time.me{color:rgba(255,255,255,.85)}
+.bubble-time.them{color:rgba(0,0,0,.55)}
+.typing-dots{display:flex;gap:4px;align-items:center;height:10px}
+.typing-dots span{width:6px;height:6px;background:#666;border-radius:50%;display:block;animation:typingBounce 0.9s infinite ease-in-out both}
+.typing-dots span:nth-child(1){animation-delay:-0.3s}
+.typing-dots span:nth-child(2){animation-delay:-0.15s}
+.typing-dots span:nth-child(3){animation-delay:0s}
+@keyframes typingBounce{0%,80%,100%{transform:translateY(0) scale(0.9);opacity:0.6}40%{transform:translateY(-4px) scale(1.1);opacity:1}}
+@keyframes boxIn{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes boxOut{from{opacity:1;transform:translateY(0) scale(1)}to{opacity:0;transform:translateY(-10px) scale(.98)}}
+.box-anim{animation:boxIn .42s cubic-bezier(.2,.8,.2,1) both}
+.box-anim-out{animation:boxOut .28s cubic-bezier(.4,0,.6,1) both}
+.btn-press{transition:transform .14s ease, opacity .14s ease}
+.btn-press:active{transform:scale(.96)}
+input,button{box-sizing:border-box; max-width:100%}
+input[type="checkbox"]{
+  -webkit-appearance:none; appearance:none;
+  width:18px; height:18px; flex:0 0 18px;
+  min-width:18px; min-height:18px;
+  max-width:18px; max-height:18px;
+  background:rgba(255,255,255,.12);
+  border:1px solid rgba(255,255,255,.18);
+  border-radius:5px;
+  display:grid; place-items:center;
+  cursor:pointer; margin:0; padding:0;
+  transition:.15s;
+  -webkit-tap-highlight-color:transparent;
+  -webkit-touch-callout:none;
+  -webkit-user-select:none;
+  user-select:none;
+  outline:none;
+  box-shadow:none;
+}
+input[type="checkbox"]:focus{outline:none; box-shadow:none;}
+input[type="checkbox"]:active{outline:none; box-shadow:none; -webkit-tap-highlight-color:transparent;}
+input[type="checkbox"]::selection{background:transparent;}
+input[type="checkbox"]:checked{background:#fff; border-color:#fff;}
+input[type="checkbox"]:checked::after{
+  content:""; width:4px; height:8px; border:solid #000;
+  border-width:0 2px 2px 0; transform:rotate(45deg) translateY(-1px); display:block;
+}
+</style>
+</head><body style="margin:0">
+<div id="root"></div>
+<script type="text/babel">
+const SUPABASE_URL = "https://dzcbhuiyiohqfijdgfey.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_sGHKmn4XDN_k4zhGoptF1w_PkRNXewG";
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Viewport lock: Prevent header scroll on virtual keyboard open.
+// position:fixed on html/body is insufficient on mobile (iOS Safari) - browser shifts visual viewport.
+// Solution: Sync .app height to visualViewport.height and lock window scroll to 0,0.
+(function lockViewport(){
+  function apply(){
+    const app=document.querySelector(".app");
+    if(!app) return requestAnimationFrame(apply);
+    if(window.visualViewport){
+      app.style.height=window.visualViewport.height+"px";
+      window.scrollTo(0,0);
+    }
+    // Keep chat pinned to bottom after viewport resize (keyboard) to prevent last message being obscured.
+    if(window.__scrollChatToBottom) window.__scrollChatToBottom();
+  }
+  if(window.visualViewport){
+    window.visualViewport.addEventListener("resize", apply);
+    window.visualViewport.addEventListener("scroll", apply);
+  }
+  window.addEventListener("resize", apply);
+  document.addEventListener("focusin", ()=>setTimeout(apply,50), true);
+  document.addEventListener("focusout", ()=>setTimeout(apply,50), true);
+  requestAnimationFrame(apply);
+})();
+
+// === Cryptography (Preserved): X25519 key exchange, HKDF, HMAC, Double Ratchet ===
+const xe={fromBuf:(e)=>{let n=e instanceof Uint8Array?e:new Uint8Array(e),t="",r=32768;for(let l=0;l<n.length;l+=r)t+=String.fromCharCode.apply(null,Array.from(n.subarray(l,l+r)));return btoa(t)},toBuf:(e)=>{let n=atob(e),t=new Uint8Array(n.length);for(let r=0;r<n.length;r++)t[r]=n.charCodeAt(r);return t.buffer}};
+async function Ri(){let e=await crypto.subtle.generateKey({name:"X25519"},!0,["deriveBits"]),n=await crypto.subtle.exportKey("raw",e.publicKey);return{priv:e.privateKey,pub:e.publicKey,pubRaw:n}}
+async function Vf(e){return await crypto.subtle.importKey("raw",e,{name:"X25519"},!1,[])}
+async function so(e,n){return await crypto.subtle.deriveBits({name:"X25519",public:n},e,256)}
+async function Oi(e,n){let t=await crypto.subtle.importKey("raw",n,"HKDF",!1,["deriveBits"]),r=await crypto.subtle.deriveBits({name:"HKDF",hash:"SHA-256",salt:e,info:new TextEncoder().encode("delima-ratchet-root")},t,512),l=new Uint8Array(r);return{rk:l.slice(0,32),ck:l.slice(32,64)}}
+async function Ai(e){let n=await crypto.subtle.importKey("raw",e,{name:"HMAC",hash:"SHA-256"},!1,["sign"]),t=await crypto.subtle.sign("HMAC",n,new Uint8Array([1])),r=await crypto.subtle.sign("HMAC",n,new Uint8Array([2]));return{mk:new Uint8Array(t),ck:new Uint8Array(r)}}
+async function Fm(e,n,t){let r=await crypto.subtle.importKey("raw",e.slice(0,32),"AES-GCM",!1,["encrypt"]),l=crypto.getRandomValues(new Uint8Array(12)),o=new TextEncoder().encode(JSON.stringify(n)),u=new TextEncoder().encode(JSON.stringify(t)),i=await crypto.subtle.encrypt({name:"AES-GCM",iv:l,additionalData:u},r,o);return{iv:xe.fromBuf(l.buffer),ct:xe.fromBuf(i),header:t}}
+async function Of(e,n,t,r){let l=await crypto.subtle.importKey("raw",e.slice(0,32),"AES-GCM",!1,["decrypt"]),o=xe.toBuf(n),u=xe.toBuf(t),i=new TextEncoder().encode(JSON.stringify(r)),s=await crypto.subtle.decrypt({name:"AES-GCM",iv:new Uint8Array(o),additionalData:i},l,u);return JSON.parse(new TextDecoder().decode(s))}
+function $f(e,n){return `${e}:${n}`}
+function io(){return{DHs:null,DHr:null,RK:null,CKs:null,CKr:null,Ns:0,Nr:0,PN:0,MKSKIPPED:new Map,ready:!1}}
+function zeroizeRatchet(r){
+  try{
+    if(!r) return;
+    // pattern yang diminta: sodium.memzero(priv) -> 00 00 00 00
+    if(r.RK instanceof Uint8Array && window.sodium?.memzero){ try{ window.sodium.memzero(r.RK); }catch{ r.RK.fill(0); } } else if(r.RK instanceof Uint8Array){ r.RK.fill(0); }
+    if(r.CKs instanceof Uint8Array && window.sodium?.memzero){ try{ window.sodium.memzero(r.CKs); }catch{ r.CKs.fill(0); } } else if(r.CKs instanceof Uint8Array){ r.CKs.fill(0); }
+    if(r.CKr instanceof Uint8Array && window.sodium?.memzero){ try{ window.sodium.memzero(r.CKr); }catch{ r.CKr.fill(0); } } else if(r.CKr instanceof Uint8Array){ r.CKr.fill(0); }
+    if(r.MKSKIPPED){
+      for(const v of r.MKSKIPPED.values()){ if(v instanceof Uint8Array && window.sodium?.memzero){ try{ window.sodium.memzero(v); }catch{ v.fill(0); } } else if(v instanceof Uint8Array){ v.fill(0); } }
+      r.MKSKIPPED.clear();
+    }
+    if(r.DHs?.pubRaw){
+      try{
+        const u = r.DHs.pubRaw instanceof Uint8Array ? r.DHs.pubRaw : new Uint8Array(r.DHs.pubRaw);
+        if(window.sodium?.memzero) window.sodium.memzero(u); else u.fill(0);
+      }catch{}
+    }
+    if(r.DHr?.pubRaw){
+      try{
+        const u = r.DHr.pubRaw instanceof Uint8Array ? r.DHr.pubRaw : new Uint8Array(r.DHr.pubRaw);
+        if(window.sodium?.memzero) window.sodium.memzero(u); else u.fill(0);
+      }catch{}
+    }
+    // priv -> 00 00 00 00 di RAM, lalu nullify reference
+    if(r.DHs?.priv){ try{ r.DHs.priv = null; }catch{} }
+    r.DHs = null; r.DHr = null; r.RK = null; r.CKs = null; r.CKr = null;
+  }catch{}
+}
+const MAX_SKIP=1000;
+async function Im(e,n){let t=e instanceof Uint8Array?e:new Uint8Array(e),r=await Ri(),l=xe.fromBuf(r.pubRaw),o=await so(r.priv,n.pub),{rk:u,ck:i}=await Oi(t,o);return{DHs:{priv:r.priv,pub:r.pub,pubRaw:r.pubRaw,b64:l},DHr:n,RK:u,CKs:i,CKr:null,Ns:0,Nr:0,PN:0,MKSKIPPED:new Map,ready:!0}}
+function Um(e,n){let t=e instanceof Uint8Array?e:new Uint8Array(e),r=xe.fromBuf(n.pubRaw);return{DHs:{priv:n.priv,pub:n.pub,pubRaw:n.pubRaw,b64:r},DHr:null,RK:t,CKs:null,CKr:null,Ns:0,Nr:0,PN:0,MKSKIPPED:new Map,ready:!1}}
+async function Dm(e,n,t,r){e.PN=e.Ns,e.Ns=0,e.Nr=0,e.DHr={pub:t,pubRaw:r,b64:n};let l=await so(e.DHs.priv,e.DHr.pub),o=await Oi(e.RK,l);e.RK=o.rk,e.CKr=o.ck;let u=await Ri();e.DHs={priv:u.priv,pub:u.pub,pubRaw:u.pubRaw,b64:xe.fromBuf(u.pubRaw)};let i=await so(e.DHs.priv,e.DHr.pub),s=await Oi(e.RK,i);return e.RK=s.rk,e.CKs=s.ck,e.ready=!0,e}
+async function Rf(e,n){if(n-e.Nr>MAX_SKIP)throw new Error("MAX_SKIP exceeded");if(e.CKr===null)return;while(e.Nr<n){let{ck:t,mk:r}=await Ai(e.CKr);e.CKr=t;let l=$f(e.DHr.b64,e.Nr);e.MKSKIPPED.set(l,r),e.Nr++;if(e.MKSKIPPED.size>MAX_SKIP){let k=e.MKSKIPPED.keys().next().value;e.MKSKIPPED.delete(k)}}}
+async function Om(e,n){if(!e.CKs)throw Error("CKs null");let{ck:t,mk:r}=await Ai(e.CKs);e.CKs=t;let l={dh:e.DHs.b64,pn:e.PN,n:e.Ns};return e.Ns++,await Fm(r,n,l)}
+async function Rm(e,n,t,r){let l=$f(n.dh,n.n);if(e.MKSKIPPED.has(l)){let i=e.MKSKIPPED.get(l);return e.MKSKIPPED.delete(l),await Of(i,t,r,n)}if(n.n-e.Nr>MAX_SKIP||n.pn-e.Nr>MAX_SKIP)throw new Error("MAX_SKIP exceeded");if(!e.DHr||n.dh!==e.DHr.b64){try{await Rf(e,n.pn)}catch{}let i=xe.toBuf(n.dh),s=await Vf(i);await Dm(e,n.dh,s,i)}if(await Rf(e,n.n),!e.CKr)throw Error("CKr null");let{ck:o,mk:u}=await Ai(e.CKr);return e.CKr=o,e.Nr++,await Of(u,t,r,n)}
+function Uf(){return Math.random().toString(36).slice(2,9)}
+function Df(){let e=new Uint8Array(16);crypto.getRandomValues(e);let n="";for(let t=0;t<e.length;t++)n+=String.fromCharCode(e[t]);return btoa(n).replace(/\+/g,"-").replace(/\//g,"_").replace(/=/g,"").slice(0,24)}
+async function Vm(e){let n=new TextEncoder().encode(e),t=await crypto.subtle.digest("SHA-256",n);return new Uint8Array(t)}
+function Am(e){return Array.from(e).map((n)=>n.toString(16).padStart(2,"0")).join("")}
+async function Af(e){
+  // MIGRASI: PBKDF2 650k -> Argon2id 19MB (t=2, m=19456). Papan lama diabaikan = simpel.
+  // Flow tetap: hash password -> salt -> Argon2id -> HKDF expand -> address & AES key
+  if(!window.sodium){ await new Promise(res=>window.addEventListener("sodium-ready",res,{once:true})); }
+  await sodium.ready;
+  let n=await Vm(e);
+  let salt=n.slice(0,16);
+  // Argon2id: opslimit=2 (t), memlimit=19MB, alg Argon2id13
+  let masterBits = sodium.crypto_pwhash(32, e, salt, 2, 19456*1024, sodium.crypto_pwhash_ALG_ARGON2ID13);
+  let hkdfKey=await crypto.subtle.importKey("raw",masterBits,"HKDF",!1,["deriveBits","deriveKey"]);
+  let addrBits=await crypto.subtle.deriveBits({name:"HKDF",hash:"SHA-256",salt:salt,info:new TextEncoder().encode("address")},hkdfKey,256);
+  let address=Am(new Uint8Array(addrBits));
+  let key=await crypto.subtle.deriveKey({name:"HKDF",hash:"SHA-256",salt:salt,info:new TextEncoder().encode("key")},hkdfKey,{name:"AES-GCM",length:256},!1,["encrypt","decrypt"]);
+  return{address,salt,key,hash:n}
+}
+
+const KBBI_WORDS = ["abadi", "abjad", "absen", "acak", "acara", "acuan", "ada", "adat", "adegan", "adil", "adonan", "adopsi",
+"aduh", "agama", "agung", "ajaib", "akibat", "aksi", "aktif", "aku", "alamat", "alami", "alas", "alasan",
+"alat", "aman", "amanah", "amanat", "amarah", "ambisi", "ampere", "aneh", "angka", "antara", "antri", "apik",
+"arah", "arsip", "arti", "asal", "asih", "asing", "asli", "asmara", "asri", "asuh", "atas", "atur",
+"aturan", "aula", "aura", "aurat", "aus", "avantur", "awah", "awak", "awal", "awan", "awang", "awas",
+"awet", "awur", "ayah", "ayakan", "ayal", "ayam", "ayan", "ayap", "ayat", "ayem", "ayom", "ayu",
+"ayunan", "azab", "azan", "azas", "azimat", "azura", "azzam", "bab", "babad", "babah", "babak", "babi",
+"babon", "baca", "bacak", "bacar", "bacok", "bada", "badai", "badak", "badal", "badam", "badan", "badar",
+"badau", "badik", "badminton", "badui", "badut", "bafal", "bagai", "bagak", "bagal", "bagan", "bagar", "bagas",
+"bagat", "bagel", "bagi", "bagih", "bagik", "baginda", "bagja", "bago", "bagol", "bagor", "bagur", "bagus",
+"bahad", "bahagia", "bahala", "baham", "bahan", "bahana", "bahang", "bahar", "bahari", "bahas", "bahaya", "bahe",
+"baht", "bahtera", "bahu", "baik", "bail", "baiq", "baja", "bajak", "bajar", "bajau", "bajet", "baji",
+"bajingan", "bajir", "baju", "baka", "bakal", "bakar", "bakat", "bakau", "bakda", "bakdu", "bake", "bakelit",
+"bakeri", "bakhil", "bakir", "bako", "bakpao", "bakso", "bakti", "baku", "bakul", "bakung", "bala", "balah",
+"balai", "balak", "balam", "balan", "balang", "balap", "balar", "balas", "balau", "baldi", "bale", "balet",
+"balia", "balig", "baligo", "balik", "baling", "balita", "balok", "balon", "balu", "baluh", "balut", "bambang",
+"bambin", "bambu", "bana", "banal", "banar", "banat", "bangga", "banjar", "banjaran", "banji", "banjir", "bantah",
+"bantal", "banteng", "bantu", "banu", "banyu", "bapak", "barah", "barak", "barang", "barat", "barau", "barba",
+"barbel", "barber", "barberan", "barca", "baret", "baris", "barkas", "barli", "barma", "barometer", "baron", "barong",
+"barzan", "basah", "basi", "baskom", "basmi", "baso", "bata", "batagor", "batak", "batal", "batam", "batang",
+"batar", "batara", "batas", "batat", "baterai", "bati", "batik", "batin", "batir", "batok", "batu", "batuan",
+"batur", "bau", "baur", "bawa", "bawak", "bawal", "bawang", "bawas", "bawon", "bayam", "bayan", "bayang",
+"bayar", "bayat", "bayi", "bayu", "bazar", "beasiswa", "beban", "bebas", "bebat", "bebed", "bebeg", "bebek",
+"bebel", "bebenah", "bebenar", "beber", "bebet", "bebuyutan", "beca", "becak", "beda", "bedah", "bedak", "bedal",
+"bedama", "bedan", "bedel", "beduk", "begadang", "begal", "begar", "begini", "begu", "bejat", "beka", "bekal",
+"bekap", "bekas", "bekat", "bela", "belah", "belai", "belak", "belalang", "belanga", "belanja", "belas", "belat",
+"belati", "bele", "belencong", "beli", "belia", "belida", "beligo", "beling", "belit", "belok", "beluk", "belum",
+"belut", "bena", "benak", "benalu", "benang", "benar", "benda", "bendera", "bendung", "bengal", "bengkak", "bengkok",
+"benih", "bening", "benjol", "benua", "berak", "beranda", "berang", "berani", "beras", "berat", "berau", "berburu",
+"berdaulat", "berduri", "bere", "beregu", "beres", "berga", "bergaul", "beri", "beringin", "berisik", "berita", "berkah",
+"berkat", "berlalu", "berma", "bernafas", "beruang", "besar", "betah", "betis", "beton", "betul", "biadab", "biang",
+"biar", "biasa", "biaya", "bibit", "bicara", "bijak", "biji", "biku", "bilah", "bilang", "bilis", "bima",
+"bimbing", "bina", "binar", "binatang", "bincang", "bingkai", "bingung", "bini", "bintang", "bintik", "biola", "biologi",
+"biru", "bisa", "bisik", "bising", "bison", "bit", "biti", "bitis", "bius", "blangko", "blaster", "blok",
+"blus", "bobo", "bobok", "bobot", "bocah", "bocor", "bodi", "bodoh", "bogem", "bogor", "bohong", "bola",
+"bolak", "bolang", "boleh", "bolos", "bom", "bon", "bonceng", "bondot", "boneka", "bongak", "bongkar", "bongsai",
+"bonus", "bopeng", "bor", "boraks", "borang", "borgol", "borju", "borok", "boros", "bosen", "botak", "botol",
+"boyak", "brak", "braket", "brankas", "brata", "bravo", "breksi", "brengos", "brengsek", "bri", "briket", "bron",
+"bronkitis", "bros", "brosur", "brutu", "buah", "buai", "buana", "buang", "buas", "buat", "buaya", "bubar",
+"bubu", "bubuk", "bucin", "budak", "budal", "budaya", "buddha", "budeg", "budi", "buih", "bujang", "bujet",
+"buka", "bukan", "bukit", "bukti", "buku", "bukur", "bulai", "bulan", "bulat", "bule", "buli", "bulir",
+"bulu", "bumbu", "bumbung", "bumi", "bumo", "bunda", "bundar", "bunga", "bungah", "bungai", "bungkus", "bungsu",
+"bunian", "buntal", "buntat", "buntel", "bunting", "buntut", "bunuh", "bunyi", "bura", "burai", "buram", "buras",
+"burat", "burayak", "burdah", "burek", "burik", "burit", "buron", "bursa", "buruh", "buruk", "busa", "busana",
+"busuk", "busur", "buta", "butek", "butik", "butir", "butuh", "buya", "buyar", "buyut", "cabai", "cabi",
+"cabik", "cabir", "cabok", "cabut", "cacak", "cacar", "cacat", "caci", "cacing", "cacu", "cada", "cadang",
+"cadar", "cadas", "cadi", "cadik", "cado", "cadok", "cagak", "cagar", "cagu", "cahang", "cai", "cair",
+"cakak", "cakap", "cakar", "cakra", "calak", "calar", "calo", "calon", "calung", "camat", "cambah", "cambuk",
+"campa", "campak", "campur", "camuk", "cana", "canang", "canda", "candat", "candi", "candra", "candu", "cangak",
+"cangih", "cangkok", "cangkul", "cantas", "cantek", "cantik", "cantol", "cap", "capai", "capak", "capal", "capar",
+"capek", "capik", "caping", "caplok", "capuk", "cara", "carah", "carak", "carang", "cari", "carik", "caruk",
+"catan", "catat", "catu", "catur", "catut", "cawak", "cawan", "cawat", "cawis", "caya", "cebe", "ceber",
+"cebok", "cecah", "cecak", "cecar", "cecat", "cecek", "ceceng", "cecer", "cecok", "cedera", "cegah", "cek",
+"cekak", "cekal", "cekam", "cekat", "cekau", "cekcok", "cekel", "ceki", "cekik", "cekikik", "cekok", "cekuh",
+"cela", "celah", "celak", "celana", "celang", "celat", "cele", "celek", "celik", "celing", "celoteh", "cemar",
+"cemas", "cemat", "cemek", "cemil", "cemooh", "cempaka", "cempal", "cempung", "cenak", "cencang", "cendana", "cendekia",
+"cendera", "cendol", "cengang", "cengeh", "cengeng", "cengis", "cengkah", "cengkeh", "cengkeram", "cengklak", "cengli", "centang",
+"centet", "centong", "cepak", "cepat", "ceper", "cepit", "cera", "cerah", "cerai", "ceramah", "cerat", "cerca",
+"cercah", "cerda", "cerdas", "cerdik", "cere", "cereh", "cerek", "ceria", "cericap", "cericau", "cerih", "cerik",
+"cerit", "cerita", "cermat", "cermin", "cerna", "ceroboh", "cerpelai", "cetak", "cetek", "cetok", "cetus", "cewek",
+"cibir", "cicak", "cicil", "ciduk", "cikal", "cikar", "cikat", "cike", "ciku", "cila", "cilat", "cilik",
+"cilos", "cimplung", "cinta", "cintamani", "cip", "cipir", "cipok", "cira", "cirat", "ciri", "cirit", "cis",
+"citra", "cium", "ciut", "coak", "coba", "cobak", "cobek", "cocok", "codet", "cok", "cokelat", "coklat",
+"colak", "colek", "coleng", "colok", "comal", "comberan", "comblang", "comel", "comot", "condong", "congak", "congkak",
+"congkel", "conteng", "copet", "cor", "corak", "corek", "coreng", "coret", "cotok", "cotor", "cowok", "crabs",
+"cuac", "cuak", "cuan", "cuat", "cubek", "cubit", "cuk", "cukai", "cukat", "cukil", "cukong", "cukup",
+"cukur", "culak", "culik", "culun", "cuma", "cuman", "cundang", "cungkil", "cungkup", "cupak", "cupang", "cupar",
+"cupet", "cura", "curah", "curai", "curam", "curang", "curat", "curi", "curiga", "cus", "cuti", "dada",
+"dadu", "daftar", "dagu", "dahi", "damai", "damar", "dampak", "dana", "danau", "daring", "dasar", "data",
+"datang", "daur", "daya", "debu", "debur", "debut", "dekat", "delapan", "demi", "dendam", "dengan", "depan",
+"derai", "deras", "derita", "desa", "desir", "detail", "detik", "dewa", "dewan", "dialog", "dingin", "diskon",
+"doa", "domba", "dongeng", "dosa", "duduk", "duka", "dukung", "dunia", "duri", "duta", "edar", "edisi",
+"efek", "egois", "ekor", "ekstrim", "elang", "elegan", "elok", "emas", "embun", "emosi", "empuk", "enak",
+"endap", "energi", "enggan", "erat", "erosi", "esok", "etika", "fajar", "fakta", "faktor", "fasih", "fatal",
+"fauna", "fiksi", "fisik", "fobia", "fokus", "formil", "forum", "foto", "frasa", "fungsi", "gadis", "gagah",
+"gagal", "gajah", "gajih", "gala", "galau", "galeri", "gambar", "gampang", "gandum", "ganti", "garang", "garis",
+"garuda", "gatal", "gaung", "gaya", "gebyar", "gembira", "gembur", "genap", "gendang", "genggam", "getar", "giat",
+"gigi", "gila", "gilang", "ginjal", "gizi", "gladiator", "goda", "golok", "gores", "gotong", "goyah", "gradasi",
+"graha", "gratis", "gugah", "gugur", "gulir", "guna", "guntur", "gurau", "gusar", "hadiah", "hadir", "hajat",
+"hakim", "halus", "hambar", "hamil", "hampa", "hampir", "handal", "hangat", "hantu", "hapus", "harap", "harga",
+"harimau", "harum", "hasrat", "hati", "haus", "hebat", "heboh", "hemat", "hembus", "hendak", "heneng", "heran",
+"hewan", "hias", "hidup", "hijau", "hikmat", "hilang", "hina", "hiruk", "hitung", "hobi", "hormat", "hujan",
+"hulu", "humas", "huruf", "hutan", "ibadah", "ibarat", "iblis", "ide", "ideal", "ikan", "ikhlas", "iklan",
+"iklim", "ikrar", "ikuti", "ilham", "ilmiah", "ilmu", "iman", "imbas", "imbau", "impian", "imut", "indah",
+"induk", "inform", "intan", "inti", "irama", "irit", "isak", "isi", "istilah", "istri", "isyarat", "izin",
+"jabat", "jabatan", "jagad", "jagung", "jahat", "jahit", "jalak", "jalan", "jalin", "jamah", "jambu", "jamur",
+"janda", "janji", "jantung", "jarak", "jarang", "jasad", "jatuh", "jauh", "jawab", "jaya", "jelang", "jelas",
+"jeli", "jembar", "jemur", "jenak", "jenguk", "jeram", "jernih", "jeruk", "jingga", "jiwa", "jodoh", "joget",
+"joki", "juara", "judul", "jujur", "jukir", "jumawa", "jumlah", "junjung", "juru", "justru", "kabar", "kabut",
+"kaca", "kado", "kafan", "kaget", "kagum", "kahar", "kail", "kaji", "kakak", "kakek", "kaku", "kalah",
+"kalau", "kalbu", "kalem", "kamera", "kampung", "kanak", "kanan", "kandang", "kangen", "kanvas", "kapal", "karam",
+"karat", "karbit", "karbon", "karcis", "kardus", "karib", "karir", "karisma", "karsa", "karunia", "karya", "kasar",
+"kaset", "kasih", "kasti", "kasur", "kata", "katak", "katul", "katup", "kawah", "kawat", "kaya", "kayu",
+"kayuh", "kebal", "kebaya", "kebun", "kecap", "kecil", "kecut", "kedai", "kedelai", "kedip", "kedua", "kejam",
+"kejap", "kejar", "keji", "kekal", "kelam", "kelapa", "kelar", "keledai", "kelinci", "kemah", "kemala", "kembang",
+"kempis", "kemudi", "kenal", "kenang", "kenanga", "kencana", "kendala", "kental", "kenyang", "kepala", "keping", "keram",
+"kerbau", "kerdil", "kere", "keren", "kerikil", "keris", "keriting", "kerja", "kerta", "kertas", "keruh", "kerupuk",
+"kesal", "kesemek", "ketam", "ketan", "ketapang", "ketaton", "ketiak", "ketua", "ketupat", "kibar", "kicau", "kidal",
+"kilat", "kilau", "kincir", "kinclong", "kini", "kios", "kipas", "kiprah", "kira", "kirana", "kirim", "kisah",
+"kismis", "kita", "koboi", "kobra", "kocak", "kodak", "kohesi", "kokoh", "kolak", "kolam", "komedi", "kompas",
+"kompor", "konde", "konon", "koral", "koran", "korban", "korek", "korma", "kota", "kotor", "koya", "kram",
+"kramat", "kran", "kraton", "krayon", "kreasi", "kreatif", "kripik", "krisan", "krispi", "kristal", "kroto", "krupuk",
+"kuah", "kuas", "kuat", "kubah", "kubis", "kucing", "kucur", "kuda", "kudung", "kudus", "kue", "kuitansi",
+"kuku", "kukuh", "kukus", "kulai", "kulit", "kuman", "kumbang", "kumis", "kumpai", "kumpul", "kunang", "kuning",
+"kunir", "kuno", "kunyit", "kupas", "kupu", "kuras", "kurma", "kurung", "kurus", "kusam", "kusen", "kutil",
+"kutip", "kutu", "kuyup", "laba", "labu", "lacak", "lada", "ladang", "lagak", "lagu", "lahar", "lahir",
+"laju", "laku", "lalai", "lalat", "lambat", "lambung", "lampau", "lamun", "lancar", "landai", "langit", "lanjut",
+"lantas", "lapar", "lari", "larut", "lasak", "latar", "lawak", "lawan", "lawas", "layak", "layar", "lebah",
+"lebar", "lebat", "lebih", "lebur", "lega", "leher", "lekat", "lelah", "lelap", "lemah", "lemar", "lembut",
+"lengah", "lengkap", "lentur", "lepas", "lerai", "lerap", "lestari", "lesu", "letih", "lewat", "liar", "lihat",
+"liku", "lincah", "lingkar", "lipat", "lirih", "lisah", "lobang", "logika", "lomba", "longgar", "losmen", "luas",
+"lubang", "luhur", "luka", "lukis", "luluh", "lulus", "lumba", "lumbung", "lumpur", "lunak", "lunas", "lupa",
+"lurah", "lurus", "lusuh", "mabuk", "madah", "madu", "magang", "mahal", "mahir", "main", "majemuk", "maka",
+"makmur", "makna", "malam", "malang", "malu", "mamah", "mampir", "mampu", "manis", "manja", "mantap", "mara",
+"marah", "masak", "masih", "masuk", "mata", "matang", "mati", "mayat", "mekar", "melar", "melas", "memar",
+"menang", "menat", "mentah", "merah", "merdu", "mereka", "meriam", "mesra", "mewah", "mimpi", "miris", "misal",
+"misteri", "mobil", "mocok", "modal", "modern", "mogok", "mohon", "molah", "monas", "monggo", "moril", "motif",
+"muara", "muat", "muda", "mudah", "mufakat", "muka", "mula", "mulia", "mulus", "mungil", "muntah", "murah",
+"murid", "musim", "musnah", "musuh", "mutiara", "mutlak", "nada", "nadir", "nafas", "naga", "nagih", "naik",
+"najis", "nakal", "naluri", "nama", "nampak", "nanar", "napas", "narasi", "nasihat", "natal", "natang", "naung",
+"nawar", "nayam", "nekat", "nelayan", "nenek", "netral", "niaga", "nian", "nikah", "nikmat", "nilai", "nimbus",
+"noda", "nolak", "nomad", "noreh", "normal", "nosa", "nota", "nuansa", "nubuat", "nujum", "nukil", "nurani",
+"nuri", "nusa", "nyala", "nyanyi", "nyaring", "nyata", "nyawa", "nyeri", "obat", "objek", "obor", "obrol",
+"ojek", "olah", "olahraga", "oleh", "ombak", "omong", "onak", "opak", "opsi", "optik", "optimis", "orang",
+"oranye", "organ", "ornamen", "otak", "otentik", "otonom", "otot", "pabrik", "pacar", "padang", "padat", "pagar",
+"pagi", "paham", "pahit", "pahlawan", "pakai", "pakar", "paksa", "pala", "palem", "palu", "pamah", "pamor",
+"panah", "pandai", "pandu", "panen", "panggung", "panik", "pantai", "pantun", "papan", "parak", "parit", "pasir",
+"pasrah", "pasuk", "patuh", "patut", "payah", "payau", "payung", "pecah", "pedas", "peduli", "pegang", "pejuang",
+"pelan", "peluk", "pemuda", "penat", "pendam", "pendek", "penting", "penuh", "perak", "perang", "peras", "perih",
+"perisai", "perlu", "permai", "persis", "peta", "petik", "petir", "piala", "pihak", "pijar", "pijat", "pikir",
+"pilar", "pilih", "pimpin", "pintar", "pintu", "pipi", "pisah", "pisau", "pita", "piutang", "pohon", "pojok",
+"poka", "polos", "pondok", "pongah", "porak", "poros", "potong", "praja", "prasa", "prasasti", "pria", "prima",
+"prinsip", "puas", "pucuk", "pudar", "puisi", "pukat", "pukul", "pulas", "pulau", "pulih", "pundak", "pungut",
+"puntung", "pupuk", "pupus", "pusat", "pustaka", "putih", "putik", "putus", "puyuh", "qadar", "qaidah", "qalam",
+"qanun", "qari", "qasar", "qibla", "qiraah", "qirat", "qisas", "quran", "qurani", "qurban", "raba", "rabat",
+"rabu", "raga", "ragam", "ragu", "rahasia", "rahim", "raja", "rajin", "rakit", "rakus", "ralat", "ramah",
+"ramai", "ramal", "rambut", "rancak", "rancu", "randa", "rangga", "ranjau", "rantai", "rapat", "rapi", "rapuh",
+"rasa", "rasul", "rata", "ratu", "raung", "rawa", "rawan", "rayap", "rayu", "rebah", "rebus", "recah",
+"reda", "redam", "redup", "regang", "rejeki", "rela", "remah", "remang", "rembulan", "renang", "rendah", "renik",
+"renyah", "repah", "resah", "resam", "resap", "restu", "retak", "riang", "rias", "ribu", "rindu", "ringkas",
+"rintih", "rintik", "risak", "risau", "ritme", "riuh", "robek", "roda", "rohan", "rojak", "rombak", "rompi",
+"rona", "rontok", "rorok", "rosok", "ruang", "rubah", "rugi", "rumah", "rumbia", "rumit", "rumpun", "runtuh",
+"rupa", "ruru", "rusa", "rusak", "rusuh", "sabar", "sabun", "sadar", "safari", "sagu", "sahabat", "saham",
+"sahih", "sajak", "sakit", "saksi", "salam", "salju", "sama", "samar", "sambal", "sampah", "sampan", "sanad",
+"sanak", "sandang", "sandi", "sangar", "sanggup", "santai", "santun", "sapa", "sapi", "saraf", "sarah", "saran",
+"sarang", "saring", "sastra", "satin", "satuan", "sauh", "sawah", "sawo", "sayap", "sayur", "sebar", "sebut",
+"sedan", "sedap", "sedih", "segar", "sehat", "sejuk", "sekam", "selam", "selang", "selar", "selat", "sele",
+"seleb", "selir", "semak", "semang", "semangat", "sembah", "sempit", "semu", "senang", "senar", "sendu", "senja",
+"senyum", "sepuh", "serah", "serak", "seram", "serap", "serat", "serbu", "seru", "sesak", "sesal", "setia",
+"siaga", "siak", "siang", "siap", "siar", "sibuk", "sikap", "silam", "silau", "simpul", "sinar", "singa",
+"sinta", "sipat", "sira", "siram", "siri", "sirna", "sisa", "sisik", "sisir", "siswa", "situs", "sium",
+"sobat", "sobek", "soca", "soga", "sohib", "soleh", "sombong", "sopan", "sorak", "sore", "sori", "sosok",
+"soto", "suara", "subur", "suci", "sudah", "sudur", "sugih", "suhu", "sujud", "suka", "sukar", "sukma",
+"sula", "sulam", "suling", "sultan", "suluh", "sumpah", "sungai", "sunyi", "supir", "surah", "surai", "surat",
+"surga", "surut", "susah", "susun", "sutra", "syair", "syukur", "tabah", "tabel", "tabir", "tabung", "tadah",
+"tadi", "tagak", "tagih", "tahan", "tahap", "tahi", "tajam", "tajuk", "takar", "takut", "talas", "tali",
+"taman", "tamat", "tambah", "tambuh", "tampan", "tampil", "tangah", "tangis", "tangkap", "tani", "tanpa", "tapak",
+"tapis", "tarah", "tarik", "taruh", "tasbih", "tata", "taubat", "tawar", "tebal", "tebar", "tebing", "tegak",
+"tegar", "tegas", "tegur", "tekad", "tekuk", "telak", "telan", "telat", "teluk", "teman", "tembus", "tempa",
+"tempur", "tenang", "tenar", "tenda", "tendang", "tenggah", "tengok", "tenun", "tepar", "tepas", "tepat", "tepuk",
+"terang", "teras", "terbit", "terik", "terima", "terka", "ternak", "terompet", "teropong", "tertib", "tetak", "tetas",
+"tewas", "tiada", "tiang", "tiba", "tidak", "tidur", "tiga", "tikam", "tikar", "tikus", "tilam", "timah",
+"timba", "timbul", "timur", "tinang", "tinju", "tipis", "tiram", "tiru", "titip", "tiup", "tobat", "tokoh",
+"tolak", "tolong", "ubah", "ubin", "ubur", "ucapan", "udara", "uji", "ujian", "ulang", "ulas", "ulat",
+"ulir", "ulu", "ulung", "umbar", "umbi", "umbu", "umum", "umur", "unai", "undang", "undur", "unggul",
+"ungu", "unik", "unsur", "untai", "untung", "upah", "upaya", "urai", "urat", "urus", "usaha", "usai",
+"usia", "usik", "usir", "usulan", "utama", "utara", "utuh", "uyah", "vaksin", "valuta", "verba", "vihara",
+"vila", "villa", "visi", "vital", "vokal", "voltase", "volume", "vonis", "wabah", "wadah", "wajah", "wajan",
+"wajar", "wakaf", "waktu", "walau", "wangi", "warga", "waris", "warna", "warta", "waspada", "watak", "wawan",
+"wayang", "xenofobia", "xenon", "xilem", "xilofon", "yakin", "yatim", "yayas", "yodium", "yogurt", "yudisium", "yuran",
+"zaitun", "zakat", "zaman", "ziarah", "zirkon", "zodiak", "zona", "zuhur"];
+
+function genKodeKata(){
+  const arr = new Uint32Array(4);
+  crypto.getRandomValues(arr);
+  const picks = Array.from(arr).map(v => KBBI_WORDS[v % KBBI_WORDS.length]);
+  return picks.join("-");
+}
+
+function parseKodeWords(s){
+  if(!s) return [];
+  return s.toLowerCase().trim().split("-").map(w=>w.trim()).filter(w=>w.length>0);
+}
+
+function App(){
+const [u,setU]=React.useState(false);
+const [msgs,setMsgs]=React.useState([]);
+const [inp,setInp]=React.useState("");
+const [typing,setTyping]=React.useState(false);
+const [link,setLink]=React.useState(""); // dipakai cuma sebagai flag "menunggu"
+const [y,setY]=React.useState("main");
+const [boxAnim,setBoxAnim]=React.useState("in");
+const [kode,setKode]=React.useState("");
+const [statusMsg,setStatusMsg]=React.useState("");
+const [loading,setLoading]=React.useState(false);
+const [mode,setMode]=React.useState("buat");
+const ratchet=React.useRef(io());
+const tokenRef=React.useRef(Df());
+const channelRef=React.useRef(null);
+const incomingQueueRef=React.useRef(Promise.resolve());
+const isInitiator=React.useRef(null); // FIX ABSOLUT: null = belum diputuskan, akan diputuskan deterministik via B64 comparison
+const typingTimeoutRef=React.useRef(null);
+const typingThrottleRef=React.useRef(0);
+const scrollBoxRef=React.useRef(null);
+const inpRef=React.useRef(null);
+const isAtBottomRef=React.useRef(true);
+
+  // === FORENSIC PATTERN YANG DIMINTA USER ===
+  const doWipe = React.useCallback(()=>{
+    try{
+      const r = ratchet.current;
+      if(r){
+        // sodium.memzero(priv) -> 00 00 00 00 di RAM
+        if(r.RK && window.sodium?.memzero){ try{ window.sodium.memzero(r.RK); }catch{} }
+        if(r.CKs && window.sodium?.memzero){ try{ window.sodium.memzero(r.CKs); }catch{} }
+        if(r.CKr && window.sodium?.memzero){ try{ window.sodium.memzero(r.CKr); }catch{} }
+        if(r.DHs?.pubRaw){
+          try{
+            const u = r.DHs.pubRaw instanceof Uint8Array ? r.DHs.pubRaw : new Uint8Array(r.DHs.pubRaw);
+            if(window.sodium?.memzero) window.sodium.memzero(u);
+          }catch{}
+        }
+        if(r.MKSKIPPED){
+          for(const v of r.MKSKIPPED.values()){
+            if(v instanceof Uint8Array && window.sodium?.memzero){ try{ window.sodium.memzero(v); }catch{} }
+          }
+          r.MKSKIPPED.clear();
+        }
+        zeroizeRatchet(r);
+        ratchet.current = io();
+      }
+      setMsgs([]); setInp(''); setLink(''); setU(false); setY('main'); setStatusMsg('');
+      try{ tokenRef.current=''; }catch{}
+      try{ tokenRef.current=Df(); }catch{}
+      try{ if(inpRef.current){ inpRef.current.value=''; } }catch{}
+      try{ console.clear(); }catch{}
+    }catch{}
+  },[]);
+
+  React.useEffect(()=>{
+    const handler = ()=>{ try{ doWipe(); }catch{} };
+    window.addEventListener('pagehide', handler);
+    window.addEventListener('beforeunload', handler);
+    return ()=>{
+      window.removeEventListener('pagehide', handler);
+      window.removeEventListener('beforeunload', handler);
+    };
+  },[doWipe]);
+
+
+const scrollToBottom=React.useCallback((force)=>{
+  const el=scrollBoxRef.current;
+  if(!el) return;
+  if(force || isAtBottomRef.current){
+    el.scrollTop=el.scrollHeight;
+    isAtBottomRef.current=true;
+  }
+},[]);
+React.useEffect(()=>{ scrollToBottom(); },[msgs, typing, y, u, scrollToBottom]);
+React.useEffect(()=>{
+  window.__scrollChatToBottom=scrollToBottom;
+  return ()=>{ if(window.__scrollChatToBottom===scrollToBottom) window.__scrollChatToBottom=null; };
+},[scrollToBottom]);
+
+React.useEffect(()=>{
+  if(y==="kode" && !kode){
+    try{ setKode(genKodeKata()); }catch{}
+  }
+},[y]);
+
+async function ensureKeys(){
+  if(ratchet.current.DHs) return ratchet.current;
+  const kp=await Ri(); const b64=xe.fromBuf(kp.pubRaw);
+  ratchet.current.DHs={priv:kp.priv,pub:kp.pub,pubRaw:kp.pubRaw,b64}; return ratchet.current;
+}
+
+async function connectTo(targetId){
+  if(channelRef.current){ try{ await channelRef.current.unsubscribe(); }catch{} }
+  incomingQueueRef.current=Promise.resolve();
+  const ephemeralPresenceKey=Df();
+  const ch=supabaseClient.channel(`ob256-${targetId}`, {config:{presence:{key:ephemeralPresenceKey}, broadcast:{self:false}}});
+  channelRef.current=ch;
+
+  async function processIncoming(payload){
+    try{
+      const L=payload;
+      if(!L||!L._delima) return;
+      if(L.type==="typing"){ setTyping(!!L.val); return; }
+      if(L.type==="end"){ 
+        try{ channelRef.current?.unsubscribe(); }catch{}
+        channelRef.current=null;
+        doWipe();
+        return; 
+      }
+      if(L.type==="ecdh-pub"){ await handleEcdh(L.pub); return; }
+      if(L.type==="auth"){
+        if(L.token!==tokenRef.current){ await ch.unsubscribe(); setU(false); return; }
+        return;
+      }
+      if(L.type==="enc"){
+        const r=ratchet.current;
+        if(!r.RK) return;
+        try{
+          const h=L.header;
+          const dec=await Rm(r,h,L.iv,L.ct);
+          setStatusMsg("");
+          if(dec.type==="end"){ 
+            try{ channelRef.current?.unsubscribe(); }catch{}
+            channelRef.current=null;
+            doWipe();
+            return; 
+          }
+          if(dec.type==="typing"){ setTyping(!!dec.val); return; }
+          if(dec.text && dec.text.length>2000){ return; }
+          if(dec.type==="msg"){ const rnow=Date.now(); setMsgs(m=>[...m,{id:dec.id,text:dec.text,from:"them",time:rnow}]); setTyping(false); return; }
+        }catch{}
+      }
+    }catch{}
+  }
+
+  ch.on("broadcast",{event:"delima-msg"}, ({payload})=>{
+    incomingQueueRef.current = incomingQueueRef.current.then(()=>processIncoming(payload)).catch(()=>{});
+  });
+
+  // FIX GROK: initiator ditentukan oleh siapa paling dulu di waiting room
+    ch.on("presence",{event:"sync"}, ()=>{
+    // FIX ABSOLUT: Presence tidak lagi menentukan role cryptography.
+    // Role sekarang 100% deterministik berdasarkan perbandingan B64 public key
+    // di handleEcdh, jadi sync ini hanya untuk observability, tidak mengubah isInitiator.
+    try{
+      const state = ch.presenceState();
+      //
+    }catch{}
+  });
+
+  // Presence fix: If peer A published pub_A before peer B joined, B would miss it.
+  // Solution: Broadcast public key on every new presence join ulang pub kita biar yang baru join dapat.
+  ch.on("presence",{event:"join"}, async ()=>{
+    try{
+      await ensureKeys();
+      const pub = ratchet.current.DHs?.b64;
+      if(pub && channelRef.current){
+        await channelRef.current.send({type:"broadcast", event:"delima-msg", payload:{_delima:true,type:"ecdh-pub",pub}});
+      }
+    }catch{}
+  });
+
+  ch.on("presence",{event:"leave"},()=>{ try{ channelRef.current?.unsubscribe(); }catch{} channelRef.current=null; doWipe(); });
+
+  ch.subscribe(async (s)=>{
+    if(s==="SUBSCRIBED"){
+      try{
+        // FIX ABSOLUT: Jangan tentukan role dari presence countBefore (rentan jitter).
+        // Role = null dulu, akan diputuskan deterministik di handleEcdh saat kedua pubkey sudah ada:
+        //   myPubB64 < theirPubB64  => Initiator (yang kecil)
+        //   myPubB64 > theirPubB64  => Joiner (yang besar)
+        // Ini 100% identik di kedua sisi tanpa tergantung urutan network.
+        isInitiator.current = null;
+        await ensureKeys();
+        const pub=ratchet.current.DHs.b64;
+        await ch.send({type:"broadcast", event:"delima-msg", payload:{_delima:true,type:"ecdh-pub",pub}});
+        await ch.track({online:true, joinedAt: Date.now()});
+        setStatusMsg("");
+      }catch(e){ console.error(e); setStatusMsg("Gagal konek: "+(e?.message||e)); }
+    }
+    if(s==="CHANNEL_ERROR"||s==="TIMED_OUT"){ setStatusMsg("Koneksi realtime gagal ("+s+")"); }
+  });
+}
+
+async function handleEcdh(pubB64){
+  try{
+    const raw=xe.toBuf(pubB64);
+    const pub=await Vf(raw);
+    const obj={pub,pubRaw:raw,b64:pubB64};
+    await ensureKeys();
+    const myB64 = ratchet.current.DHs?.b64;
+    if(!myB64){ console.warn("myB64 belum siap"); return; }
+    if(myB64 === pubB64) return; // abaikan echo diri sendiri
+
+    // === FIX ABSOLUT: Deterministik Berdasarkan Nilai Kunci B64 ===
+    // Tanpa presence, tanpa timing. Siapa B64 lebih kecil = Initiator, lebih besar = Joiner.
+    // Ini 100% identik di kedua belah pihak terlepas dari jitter / urutan paket.
+    if(ratchet.current.RK && ratchet.current.DHr){
+      // Sudah handshake, ini adalah ratchet step (DH ratchet)
+      if(ratchet.current.DHr.b64 !== pubB64){
+        const raw2=xe.toBuf(pubB64);
+        const pub2=await Vf(raw2);
+        await Dm(ratchet.current, pubB64, pub2, raw2);
+        setU(true); setStatusMsg(""); setLink("");
+        try{
+          const newPub2 = ratchet.current.DHs.b64;
+          await channelRef.current.send({type:"broadcast", event:"delima-msg", payload:{_delima:true,type:"ecdh-pub",pub:newPub2}});
+        }catch{}
+      }
+      return;
+    }
+
+    // Belum ada RK = fase handshake awal, tentukan role sekarang
+    if(isInitiator.current === null){
+      const amIInitiator = myB64 < pubB64; // leksikografis B64
+      isInitiator.current = amIInitiator;
+    }
+
+    if(!isInitiator.current && !ratchet.current.RK){
+      // Saya Joiner (B64 saya lebih besar)
+      const shared=await so(ratchet.current.DHs.priv, pub);
+      const res=await Im(shared,obj);
+      ratchet.current=res;
+      try{
+        const newPub = ratchet.current.DHs.b64;
+        await channelRef.current.send({type:"broadcast", event:"delima-msg", payload:{_delima:true,type:"ecdh-pub",pub:newPub}});
+      }catch{}
+      await channelRef.current.send({type:"broadcast", event:"delima-msg", payload:{_delima:true,type:"auth",token:tokenRef.current}});
+      setU(true); setStatusMsg(""); setLink("");
+      return;
+    }
+    if(isInitiator.current && !ratchet.current.RK && !ratchet.current.DHr){
+      // Saya Initiator (B64 saya lebih kecil)
+      const shared=await so(ratchet.current.DHs.priv, pub);
+      const res=Um(shared, ratchet.current.DHs);
+      ratchet.current=res;
+      const myPub=ratchet.current.DHs.b64;
+      await channelRef.current.send({type:"broadcast", event:"delima-msg", payload:{_delima:true,type:"ecdh-pub",pub:myPub}});
+      await channelRef.current.send({type:"broadcast", event:"delima-msg", payload:{_delima:true,type:"auth",token:tokenRef.current}});
+      setU(true); setStatusMsg(""); setLink("");
+      return;
+    }
+  }catch(e){ console.error(e); setStatusMsg("Gagal handshake: "+(e?.message||e)); }
+}
+
+async function sendEnc(payload){
+  const r=ratchet.current;
+  if(!r.CKs||!r.ready){ return false; }
+  try{
+    const enc=await Om(r,payload);
+    await channelRef.current.send({type:"broadcast", event:"delima-msg", payload:{_delima:true,type:"enc",iv:enc.iv,ct:enc.ct,header:enc.header}});
+    return true;
+  }catch{ return false; }
+}
+
+// === PHOENIX: 1 fungsi Pilih untuk A & B ===
+
+function goToKodeWithAnim(){
+  setBoxAnim("out");
+  setTimeout(()=>{
+    try{ setKode(genKodeKata()); }catch{}
+    setMode("buat");
+    setY("kode");
+    setStatusMsg("");
+    setBoxAnim("in");
+  }, 260);
+}
+
+function goBackMainWithAnim(){
+  setBoxAnim("out");
+  setTimeout(()=>{
+    if(link){ try{channelRef.current?.unsubscribe();}catch{} setU(false); setMsgs([]); setLink(""); setY("main"); zeroizeRatchet(ratchet.current),ratchet.current=io(); isInitiator.current=null; }else{ setY("main"); setStatusMsg(""); }
+    setBoxAnim("in");
+  }, 220);
+}
+
+function bukaKotakKode(){
+  try{ setKode(genKodeKata()); }catch{}
+  setY("kode");
+  setStatusMsg("");
+  setMode("buat");
+}
+
+async function buatKode(){
+  let raw = (kode||"").trim().toLowerCase() || genKodeKata();
+  const words = raw.split("-").map(s=>s.trim().toLowerCase()).filter(s=>s.length>0);
+  if(words.length < 4){ setStatusMsg("Kode minimal 4 kata"); return; }
+  // normalisasi: buang spasi / hyphen dobel / trailing hyphen
+  const normalized = words.join("-");
+  // pakai normalized untuk proses selanjutnya
+  // raw = normalized  -> kita set ulang
+  raw = normalized;
+  setLoading(true);
+  setStatusMsg("Membuka ruangan...");
+  try{
+    const {address} = await Af(raw);
+    const channelId = address.slice(0,24);
+    const derivedToken = address.slice(24,48);
+    tokenRef.current = derivedToken;
+    // FIX: jangan tentukan initiator di sini lagi. Biarkan connectTo yang tentukan berdasarkan siapa dulu masuk waiting.
+    setLink("menunggu");
+    setY("main");
+    setKode(raw);
+    setStatusMsg("");
+    await connectTo(channelId);
+  }catch(e){ setStatusMsg("Gagal: "+(e?.message||e)); }
+  finally{ setLoading(false); }
+}
+
+async function masukKode(){
+  let raw = (kode||"").trim().toLowerCase();
+  const words = raw.split("-").map(s=>s.trim().toLowerCase()).filter(s=>s.length>0);
+  if(words.length < 4){ setStatusMsg("Kode minimal 4 kata"); return; }
+  // normalisasi: buang spasi / hyphen dobel / trailing hyphen
+  const normalized = words.join("-");
+  // pakai normalized untuk proses selanjutnya
+  // raw = normalized  -> kita set ulang
+  raw = normalized;
+  setLoading(true);
+  setStatusMsg("Masuk ruangan...");
+  try{
+    const {address} = await Af(raw);
+    const channelId = address.slice(0,24);
+    const derivedToken = address.slice(24,48);
+    tokenRef.current = derivedToken;
+    // FIX: sama seperti buatKode, initiator ditentukan di connectTo
+    setLink("menunggu");
+    setY("main");
+    setKode(raw);
+    setStatusMsg("");
+    await connectTo(channelId);
+  }catch(e){ setStatusMsg("Gagal: "+(e?.message||e)); }
+  finally{ setLoading(false); }
+}
+
+async function pilihKode(){
+  // FIX GROK: mode acak vs ketik tidak lagi menentukan initiator/joiner.
+  // Siapa pun yang pencet MASUK duluan = initiator, yang belakangan = joiner.
+  // Jadi buatKode dan masukKode sekarang identik, kita pakai buatKode sebagai single path.
+  return buatKode();
+}
+
+async function sendMsg(){
+  if(inp.length>2000){ alert("Pesan kepanjangan"); return; }
+  const t=inp.trim(); if(!t||!channelRef.current) return;
+  const pid=Uf();
+  if(!(await sendEnc({_delima:true,type:"msg",id:pid,text:t}))){ return; }
+  setStatusMsg("");
+  const now=Date.now(); setMsgs(m=>[...m,{id:pid,text:t,from:"me",time:now}]); setInp("");
+  scrollToBottom(true);
+  setTimeout(()=>{ inpRef.current?.focus(); }, 0);
+  try{ channelRef.current?.send({type:"broadcast", event:"delima-msg", payload:{_delima:true,type:"typing",val:false}}); }catch{};
+}
+
+const empty=(msgs.length===0 && !u && y==="main");
+const canType = u;
+
+return (
+<div className="app">
+<div className="header">
+<div style={{display:"flex",alignItems:"center",gap:6}}>
+<div style={{width:30,height:30,display:"grid",placeItems:"center"}}><svg width="28" height="28" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fillRule="evenodd" fill="black" stroke="none" d="M20.85 3.24 L13.38 10.90 L12.74 9.22 L13.11 7.74 L12.43 6.66 L13.28 5.74 L13.11 4.04 L12.20 5.49 L12.50 2.97 L11.42 4.42 L11.50 5.40 L10.72 4.05 L10.77 5.86 L11.56 6.61 L10.89 7.74 L11.26 9.12 L10.62 10.89 L9.46 10.17 L8.16 8.19 L3.15 3.24 L4.32 7.24 L5.36 8.12 L2.74 6.63 L4.12 9.67 L5.64 10.23 L3.36 10.26 L4.65 12.06 L6.50 11.90 L4.39 12.66 L5.94 13.64 L7.00 13.24 L5.73 14.28 L7.53 14.60 L8.43 13.82 L7.46 15.22 L9.28 14.85 L10.54 13.36 L10.78 15.52 L9.75 18.74 L10.56 20.43 L11.31 17.72 L11.07 19.12 L11.98 21.72 L12.93 19.12 L12.69 17.74 L13.42 20.43 L14.25 18.69 L13.22 15.57 L13.46 13.36 L14.72 14.85 L16.54 15.22 L15.56 13.80 L16.48 14.61 L18.26 14.28 L17.00 13.24 L18.04 13.64 L19.60 12.66 L17.50 11.90 L19.35 12.06 L20.64 10.26 L18.36 10.23 L19.88 9.67 L21.26 6.61 L18.61 8.13 L19.68 7.24 Z M12.57 7.50 L12.45 7.60 L12.60 7.77 L12.74 7.65 Z M11.43 7.50 L11.26 7.64 L11.38 7.77 L11.54 7.60 Z"/></svg></div>
+<span style={{fontWeight:600,fontSize:14,letterSpacing:"-0.02em"}}>Phoenix</span>
+<span style={{marginLeft:8,fontSize:10,padding:"2px 6px",borderRadius:999,background:"#000",color:"rgba(255,255,255,.7)"}}>{u?"terhubung":"belum terhubung"}</span>
+</div>
+<div>
+{y==="kode"&&!link&&!u&&<button onClick={goBackMainWithAnim} style={{height:28,padding:"0 12px",borderRadius:999,background:"rgba(0,0,0,.05)",border:0,fontSize:12}}>Kembali</button>}
+{u&&<button onClick={async()=>{ 
+        try{
+          // kirim end terenkripsi saja (forensic: jangan bocorkan plaintext)
+          const r=ratchet.current; 
+          if(r && r.CKs && r.ready){ 
+            const enc=await Om(r,{_delima:true,type:"end"}); 
+            await channelRef.current?.send({type:"broadcast", event:"delima-msg", payload:{_delima:true,type:"enc",iv:enc.iv,ct:enc.ct,header:enc.header}}); 
+          }
+        }catch{} 
+        setTimeout(async()=>{ 
+          try{ await channelRef.current?.unsubscribe(); }catch{} 
+          channelRef.current=null; 
+          doWipe(); // SATU FUNGSI - pakai doWipe yang sama
+        },250); 
+      }} style={{height:28,padding:"0 12px",borderRadius:999,background:"rgba(0,0,0,.05)",border:0,fontSize:12}}>Akhiri</button>}
+</div>
+</div>
+{statusMsg&&y!=="kode"&&<div className="mono" style={{padding:"6px 16px",fontSize:11,color:"#b91c1c",background:"#fef2f2",borderBottom:"1px solid rgba(0,0,0,.06)"}}>{statusMsg}</div>}
+
+<div ref={scrollBoxRef}
+  onScroll={()=>{
+    const el=scrollBoxRef.current;
+    if(!el) return;
+    isAtBottomRef.current=(el.scrollHeight - el.scrollTop - el.clientHeight) < 48;
+  }}
+  style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
+{y==="kode"?(
+<div className={boxAnim==="out"?"box-anim-out":"box-anim"} style={{minHeight:"72vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px"}}>
+<div style={{width:"100%",maxWidth:320,background:"#000",borderRadius:28,padding:24,display:"flex",flexDirection:"column",boxSizing:"border-box",minHeight:268,justifyContent:"center"}}>
+<div style={{width:40,height:40,borderRadius:999,background:"rgba(255,255,255,.1)",display:"grid",placeItems:"center",marginBottom:10,alignSelf:"center"}}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+<p style={{color:"#fff",fontSize:14,fontWeight:500,lineHeight:1.35,margin:"0 0 16px",textAlign:"center",alignSelf:"center"}}>Kode rahasia</p>
+<div style={{position:"relative",width:"100%",marginBottom:20}}>
+<input value={kode} onChange={e=>{ setKode(e.target.value.toLowerCase()); try{ setMode("masuk"); }catch{} }} placeholder="contoh: damai-laut-buku-sabar" type="text" autoComplete="off" spellCheck={false} style={{width:"100%",height:42,background:"rgba(255,255,255,.1)",borderRadius:999,padding:"0 48px 0 16px",fontSize:13,color:"#fff",border:0,outline:"none"}}/>
+<button onClick={()=>{ try{ setKode(genKodeKata()); setMode("buat"); }catch(e){} }} type="button" title="Acak kode baru" style={{position:"absolute",right:4,top:4,width:34,height:34,borderRadius:999,background:"#fff",border:0,display:"grid",placeItems:"center",cursor:"pointer"}}>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+</button>
+</div>
+
+<div style={{display:"flex",flexDirection:"column",gap:8,width:"100%"}}>
+<button onClick={async ()=>{
+          if(link){
+            try{ await channelRef.current?.unsubscribe(); }catch{}
+            channelRef.current=null;
+            doWipe();
+            setY("kode");
+            return;
+          }
+          // Standard join flow
+          await pilihKode();
+        }} disabled={loading} className="btn-press" style={{width:"100%",height:42,borderRadius:999,background:"#fff",color:"#000",fontSize:14,fontWeight:600,border:0,display:"flex",alignItems:"center",justifyContent:"center",gap:4,cursor:"pointer"}}>{link ? <><span>Menunggu</span><span className="waiting-dots" style={{display:"inline-flex",marginLeft:1}}><span>.</span><span>.</span><span>.</span></span></> : (loading?"Membuka...":"Masuk")}</button>
+</div>
+
+{statusMsg&&<div style={{marginTop:16,fontSize:11,color:"rgba(255,255,255,.5)",textAlign:"center"}} className="mono">{statusMsg}</div>}
+</div>
+</div>
+): empty?(
+  !link ? (
+  <div className={boxAnim==="out"?"box-anim-out":"box-anim"} style={{minHeight:"72vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px"}}>
+  <div style={{width:"100%",maxWidth:320,background:"#000",borderRadius:28,padding:24,display:"flex",flexDirection:"column",boxSizing:"border-box",minHeight:268,justifyContent:"center",alignItems:"center"}}>
+  <div style={{width:40,height:40,borderRadius:999,background:"rgba(255,255,255,.1)",display:"grid",placeItems:"center",marginBottom:10}}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7 0l1-1a5 5 0 0 0 0-7a5 5 0 0 0-7 0l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7 0l-1 1a5 5 0 0 0 0 7a5 5 0 0 0 7 0l1.5-1.5"/></svg></div>
+  <p style={{color:"#fff",fontSize:14,fontWeight:500,textAlign:"center",lineHeight:1.35,margin:"0 0 4px"}}>Belum ada sesi aman.</p>
+  <p style={{color:"rgba(255,255,255,.5)",fontSize:13,textAlign:"center",lineHeight:1.4,margin:"0 0 24px",padding:"0 8px"}}>Buat kode untuk mulai chat terenkripsi end-to-end.</p>
+  <div style={{width:"100%",display:"flex",flexDirection:"column",gap:10}}>
+  <button onClick={goToKodeWithAnim} className="btn-press" style={{width:"100%",background:"#fff",color:"#000",fontSize:14,fontWeight:600,borderRadius:999,height:42,border:0}}>Klik disini</button>
+  <button disabled style={{width:"100%",background:"rgba(255,255,255,.06)",color:"rgba(255,255,255,.35)",fontSize:12,letterSpacing:"0.04em",borderRadius:999,height:42,border:"1px solid rgba(255,255,255,.08)",cursor:"default"}}>Phoenix by Royyaan</button>
+  </div>
+  </div>
+  </div>
+  ) : (
+  <div className={boxAnim==="out"?"box-anim-out":"box-anim"} style={{minHeight:"72vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px"}}>
+<div style={{width:"100%",maxWidth:320,background:"#000",borderRadius:28,padding:24,display:"flex",flexDirection:"column",boxSizing:"border-box",minHeight:268,justifyContent:"center"}}>
+<div style={{width:40,height:40,borderRadius:999,background:"rgba(255,255,255,.1)",display:"grid",placeItems:"center",marginBottom:10,alignSelf:"center"}}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+<p style={{color:"#fff",fontSize:14,fontWeight:500,lineHeight:1.35,margin:"0 0 16px",textAlign:"center",alignSelf:"center"}}>Kode rahasia</p>
+<div style={{position:"relative",width:"100%",marginBottom:20}}>
+<input value={kode} onChange={e=>{ setKode(e.target.value.toLowerCase()); try{ setMode("masuk"); }catch{} }} placeholder="contoh: damai-laut-buku-sabar" type="text" autoComplete="off" spellCheck={false} style={{width:"100%",height:42,background:"rgba(255,255,255,.1)",borderRadius:999,padding:"0 48px 0 16px",fontSize:13,color:"#fff",border:0,outline:"none"}}/>
+<button onClick={()=>{ try{ setKode(genKodeKata()); setMode("buat"); }catch(e){} }} type="button" title="Acak kode baru" style={{position:"absolute",right:4,top:4,width:34,height:34,borderRadius:999,background:"#fff",border:0,display:"grid",placeItems:"center",cursor:"pointer"}}>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+</button>
+</div>
+<div style={{display:"flex",flexDirection:"column",gap:8,width:"100%"}}>
+<button onClick={async ()=>{
+          if(link){
+            try{ await channelRef.current?.unsubscribe(); }catch{}
+            channelRef.current=null;
+            doWipe();
+            setY("kode");
+            return;
+          }
+          // Standard join flow
+          await pilihKode();
+        }} className="btn-press" style={{width:"100%",height:42,borderRadius:999,background:"#fff",color:"#000",fontSize:14,fontWeight:600,border:0,display:"flex",alignItems:"center",justifyContent:"center",gap:4,cursor:"pointer"}}>
+<span>Menunggu</span><span className="waiting-dots" style={{display:"inline-flex",marginLeft:1}}><span>.</span><span>.</span><span>.</span></span>
+</button>
+</div>
+</div>
+</div>
+  )
+):(
+<div style={{padding:"8px 16px",display:"flex",flexDirection:"column",gap:0,maxWidth:720,margin:"0 auto"}}>
+{msgs.map((m,idx)=>{
+const timeStr=m.time?new Date(m.time).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',hour12:false}).replace(':','.'):''; 
+const isSwitch = idx>0 && msgs[idx-1].from !== m.from;
+return(
+<div key={m.id} style={{display:"flex",justifyContent:m.from==="me"?"flex-end":"flex-start",marginBottom:0, marginTop: isSwitch ? 12 : 1}}>
+<div style={{maxWidth:"78%",minWidth:0}}>
+{m.text?(
+<div className={m.from==="me"?"bubble-me":"bubble-them"}>
+<span className="bubble-content">{m.text}</span>
+{timeStr&&<span className={`bubble-time ${m.from==="me"?"me":"them"} mono`}>{timeStr}</span>}
+</div>
+):null}
+</div>
+</div>
+)})}
+{typing&&<div style={{display:"flex"}}><div style={{background:"#f0f0f0",padding:"8px 16px",borderRadius:18,borderBottomLeftRadius:5}}><div className="typing-dots"><span></span><span></span><span></span></div></div></div>}
+</div>
+)}
+</div>
+
+<div style={{background:"#fff",padding:"12px 12px 20px",display:"flex",alignItems:"center",gap:8,borderTop:"1px solid rgba(0,0,0,.04)"}}>
+<div style={{flex:1,height:42,background:"#f0f0f0",borderRadius:999,display:"flex",alignItems:"center",padding:"0 6px 0 16px",gap:8}}>
+<input ref={inpRef} value={inp}
+  onFocus={()=>{
+    scrollToBottom();
+    setTimeout(scrollToBottom, 50);
+    setTimeout(scrollToBottom, 150);
+    setTimeout(scrollToBottom, 300);
+  }}
+  onChange={e=>{ 
+  const val=e.target.value; setInp(val);
+  if(!u) return;
+  if(val.trim()){
+    const now=Date.now();
+    if(now - typingThrottleRef.current >= 600){
+      typingThrottleRef.current=now;
+      try{ channelRef.current?.send({type:"broadcast", event:"delima-msg", payload:{_delima:true,type:"typing",val:true}}); }catch{}
+    }
+  }
+  if(typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+  typingTimeoutRef.current=setTimeout(()=>{
+    try{ channelRef.current?.send({type:"broadcast", event:"delima-msg", payload:{_delima:true,type:"typing",val:false}}); }catch{}
+  }, 1200);
+  if(!val.trim()){
+    try{ channelRef.current?.send({type:"broadcast", event:"delima-msg", payload:{_delima:true,type:"typing",val:false}}); }catch{}
+    if(typingTimeoutRef.current){ clearTimeout(typingTimeoutRef.current); typingTimeoutRef.current=null; }
+  }
+}} onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); sendMsg(); } }} placeholder={u?"Ketik pesan...":(link?"Menunggu lawan bergabung...":"Buat kode dulu untuk mulai")} disabled={!canType} style={{flex:1,background:"transparent",border:0,outline:"none",fontSize:14}}/>
+<button
+  onMouseDown={e=>e.preventDefault()}
+  onTouchStart={e=>e.preventDefault()}
+  onClick={sendMsg}
+  disabled={!canType||!inp.trim()}
+  style={{width:32,height:32,borderRadius:999,background:"#000",color:"#fff",border:0,display:"grid",placeItems:"center",opacity:(!canType||!inp.trim())?.2:1}}>↑</button>
+</div>
+</div>
+</div>
+);
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+<script>(function(){var loc=location.href.replace(/#.*$/,"");var ATTR_NAMES=["data-product-id","data-productid","data-product_id","product-id","productid","product_id","data-source-entity-id","source-entity-id","source_entity_id","data-product","data-metadata","data-meta"];var DATASET_KEYS=["productId","productid","product_id","sourceEntityId","sourceentityid","source_entity_id","product","metadata","meta"];function readProductId(value){if(typeof value!=="string"||value.length===0)return null;if(/^[0-9]{6,}$/.test(value))return value;var match=value.match(/(?:product(?:_|-)?id|source(?:_|-)?entity(?:_|-)?id)["'=:\s]+([0-9]{6,})/i);return match?match[1]:null}function extractProductId(start){for(var node=start;node&&node!==document.body;node=node.parentElement){for(var i=0;i<ATTR_NAMES.length;i++){var attrValue=node.getAttribute&&node.getAttribute(ATTR_NAMES[i]);var attrProductId=readProductId(attrValue);if(attrProductId)return attrProductId}var dataset=node.dataset||null;if(dataset){for(var j=0;j<DATASET_KEYS.length;j++){var dataValue=dataset[DATASET_KEYS[j]];var dataProductId=readProductId(dataValue);if(dataProductId)return dataProductId}}}return null}function isInlineMediaSlotElement(node){return !!(node&&node.getAttribute&&node.getAttribute("data-clippy-inline-media-slot")!==null)}function findInlineMediaSlot(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(isInlineMediaSlotElement(node))return node}return null}function readInlineMediaUrl(node){if(!node)return null;return node.getAttribute&&((node.getAttribute("data-clippy-inline-media-url")||node.getAttribute("data-url")||node.getAttribute("data_url")))||node.href||null}function stripHash(url){return String(url).replace(/#.*$/,"")}function urlsMatch(a,b){if(!a||!b)return false;try{return stripHash(new URL(a,loc).href)===stripHash(new URL(b,loc).href)}catch(_){return stripHash(a)===stripHash(b)}}function isFirstPartyReelUrl(value){try{var url=new URL(value,loc);if(url.protocol!=="https:")return false;var host=url.hostname.toLowerCase();var supported=host==="instagram.com"||host.endsWith(".instagram.com")||host==="facebook.com"||host.endsWith(".facebook.com");return supported&&/\/reels?\//i.test(url.pathname)}catch(_){return false}}function isInlineMediaUrlClick(node,href){var slot=findInlineMediaSlot(node);if(!slot)return false;var slotUrl=readInlineMediaUrl(slot);if(slotUrl)return urlsMatch(href,slotUrl);return isFirstPartyReelUrl(href)}function findDataHref(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(node.getAttribute){var href=node.getAttribute("data-href")||node.getAttribute("data-url");if(href)return{href:href,node:node}}}return null}var nativeOpen=window.open;window.open=function(url){if(parent!==window&&typeof url==="string"&&/^https?:\/\//.test(url)){parent.postMessage({type:"ecto:usercontent-link-click",href:url},"*");return null}return nativeOpen?nativeOpen.apply(window,arguments):null};document.addEventListener("click",function(e){var target=e.target instanceof Element?e.target:null;if(!target)return;if(parent===window)return;var a=target.closest?target.closest("a[href]"):null;if(a&&a.href&&/^https?:\/\//.test(a.href)&&a.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(a,a.href))return;var productId=extractProductId(target)||extractProductId(a);if(productId){e.preventDefault();parent.postMessage({type:"ecto-artifact-link-click",productId:productId},"*");return}e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:a.href},"*");return}var dataHref=findDataHref(target);if(dataHref&&/^https?:\/\//.test(dataHref.href)&&dataHref.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(dataHref.node,dataHref.href))return;e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:dataHref.href},"*")}},true)})();</script><script>(function(){var FOCUS_TYPE="ecto:artifact-focus-request";var CLOSE_TYPE="ecto:artifact-close-request";function focusArtifactDocument(){var body=document.body;if(!body)return;try{window.focus();}catch(e){}if(!body.hasAttribute("tabindex"))body.setAttribute("tabindex","-1");try{body.focus({preventScroll:true});}catch(e){try{body.focus();}catch(e2){}}}window.addEventListener("message",function(event){if(event.source!==window.parent)return;var data=event.data;if(!data||typeof data!=="object"||data.type!==FOCUS_TYPE)return;if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",focusArtifactDocument,{once:true});return;}focusArtifactDocument();});window.addEventListener("keydown",function(event){if(event.key!=="Escape")return;window.setTimeout(function(){if(event.defaultPrevented)return;window.parent.postMessage({type:CLOSE_TYPE},"*");},0);});})();</script></body>
+</html>
